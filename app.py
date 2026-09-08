@@ -1,27 +1,14 @@
 import re
 import requests
-import numpy as np
-import cv2
 import streamlit as st
 from PIL import Image
 
-# ---------------------------------------------------------
-# Configuração da Página
-# ---------------------------------------------------------
-st.set_page_config(
-    page_title="Pokémon TCG Scanner & Price",
-    page_icon="🎴",
-    layout="centered"
-)
+st.set_page_config(page_title="Pokémon TCG Price", page_icon="🎴", layout="centered")
 
 st.title("🎴 Pokémon TCG Card Search")
 st.caption("Consulte valores e detalhes das cartas em tempo real via TCGdex API.")
 
-# ---------------------------------------------------------
-# Função de Consulta à API TCGdex
-# ---------------------------------------------------------
 def fetch_card_price(card_number: str):
-    """Busca o preço da carta na API da TCGdex com base no número local."""
     try:
         url = f"https://api.tcgdex.net/v2/en/cards?localId={card_number.strip()}"
         response = requests.get(url, timeout=6)
@@ -48,48 +35,37 @@ def fetch_card_price(card_number: str):
             return detail_res.json()
 
     except Exception as e:
-        st.error(f"Erro de conexão com a API: {e}")
+        st.error(f"Erro na requisição: {e}")
         return None
     return None
 
-# ---------------------------------------------------------
-# Interface Principal
-# ---------------------------------------------------------
-tab1, tab2 = st.tabs(["🔢 Digitar Número da Carta", "📷 Foto da Carta + Busca"])
+tab1, tab2 = st.tabs(["🔢 Buscar por Número", "📷 Upload / Foto da Carta"])
 
 with tab1:
-    st.markdown("##### Digite o número da carta (canto inferior direito)")
-    card_num_input = st.text_input("Exemplo: 083 ou 151", value="", max_chars=10)
+    card_num_input = st.text_input("Número da carta (ex: 083 ou 151):", value="")
     search_btn = st.button("🔍 Buscar Cotação", key="btn_direct")
 
 with tab2:
-    st.markdown("##### Capture ou faça upload da foto para referência visual")
-    uploaded_file = st.file_uploader("Escolha ou tire a foto", type=["jpg", "jpeg", "png"])
-    
+    uploaded_file = st.file_uploader("Foto para referência visual", type=["jpg", "jpeg", "png"])
     if uploaded_file is not None:
         raw_image = Image.open(uploaded_file)
-        raw_image.thumbnail((600, 600))
-        st.image(raw_image, caption="Carta Capturada", use_container_width=True)
+        raw_image.thumbnail((500, 500))
+        st.image(raw_image, caption="Carta Carregada", use_container_width=True)
         
-    num_from_photo = st.text_input("Confirme o número lido na imagem:", value="", key="photo_num")
+    num_from_photo = st.text_input("Digite o número visto na carta acima:", key="photo_num")
     search_btn_photo = st.button("🔍 Buscar Cotação da Foto", key="btn_photo")
 
-# Determina qual ação disparar
 target_card_num = None
 if search_btn and card_num_input:
     target_card_num = card_num_input
 elif search_btn_photo and num_from_photo:
     target_card_num = num_from_photo
 
-# ---------------------------------------------------------
-# Exibição dos Resultados da Cotação
-# ---------------------------------------------------------
 if target_card_num:
-    # Extrai apenas números caso o usuário digite "083/142"
     clean_num = re.findall(r'\d+', target_card_num)
     search_id = clean_num[0] if clean_num else target_card_num.strip()
 
-    with st.spinner(f"Buscando cotação para a carta nº {search_id}..."):
+    with st.spinner(f"Consultando cotação para a carta nº {search_id}..."):
         card_data = fetch_card_price(card_number=search_id)
 
         if card_data:
@@ -103,7 +79,7 @@ if target_card_num:
                 if card_image_url:
                     st.image(f"{card_image_url}/high.webp", use_container_width=True)
                 else:
-                    st.info("Imagem oficial indisponível.")
+                    st.info("Imagem não disponível.")
 
             with col2:
                 st.write(f"**Coleção:** {card_data.get('set', {}).get('name', 'N/A')}")
@@ -128,6 +104,6 @@ if target_card_num:
                     st.write(f"• Média: **€{cardmarket_prices.get('avg', 'N/A')}**")
                     st.write(f"• Mínimo: **€{cardmarket_prices.get('low', 'N/A')}**")
                 else:
-                    st.info("Cotação em tempo real não disponível no momento para este número.")
+                    st.info("Cotação em tempo real indisponível para esta carta.")
         else:
-            st.error(f"Nenhuma carta encontrada com o número **{search_id}** na base da TCGdex.")
+            st.error(f"Nenhuma carta encontrada com o número **{search_id}**.")
