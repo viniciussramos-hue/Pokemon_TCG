@@ -16,7 +16,7 @@ st.set_page_config(
 )
 
 st.title("🎴 Pokémon TCG Card Scanner")
-st.caption("Aponte a câmera para o nome e o número da carta no canto inferior (ex: 083/142).")
+st.caption("Aponte a câmera para o número da carta no canto inferior (ex: 083/142).")
 
 # ---------------------------------------------------------
 # Inicialização do Leitor OCR (Cache para otimizar carregamento)
@@ -63,90 +63,47 @@ def fetch_card_price(card_number: str):
     return None
 
 # ---------------------------------------------------------
-# Modos de Captura & Botões de Lanterna
+# Modos de Captura
 # ---------------------------------------------------------
 tab1, tab2 = st.tabs(["📷 Câmera do Celular", "📂 Upload de Imagem"])
 
 img_file = None
 
 with tab1:
-    st.write("### Captura com Lanterna")
-    
-    # HTML/JS Customizado para controle da Lanterna do Celular (Torch API)
-    torch_js_code = """
-    <div style="background:#1e293b; padding:12px; border-radius:10px; text-align:center; color:white; margin-bottom: 10px;">
-        <p style="margin-bottom:8px; font-weight:bold; font-size:14px;">⚡ Controle de Iluminação / Lanterna</p>
-        <button id="btn-torch-on" style="background-color:#22c55e; color:white; border:none; padding:8px 14px; font-size:13px; border-radius:6px; margin-right:6px; cursor:pointer;">💡 Ligar Lanterna</button>
-        <button id="btn-torch-off" style="background-color:#ef4444; color:white; border:none; padding:8px 14px; font-size:13px; border-radius:6px; cursor:pointer;">🔌 Desligar</button>
-        <p id="torch-status" style="margin-top:6px; font-size:11px; color:#94a3b8;"></p>
-    </div>
-
-    <script>
-    let track = null;
-
-    async function toggleTorch(turnOn) {
-        const statusEl = document.getElementById('torch-status');
-        try {
-            if (!track) {
-                const stream = await navigator.mediaDevices.getUserMedia({
-                    video: { facingMode: { exact: "environment" } }
-                }).catch(() => navigator.mediaDevices.getUserMedia({ video: true }));
-                
-                track = stream.getVideoTracks()[0];
-            }
-
-            const capabilities = track.getCapabilities ? track.getCapabilities() : {};
-            if (!capabilities.torch) {
-                statusEl.innerText = "Aviso: Lanterna não suportada por esta câmera/navegador.";
-                return;
-            }
-
-            await track.applyConstraints({
-                advanced: [{ torch: turnOn }]
-            });
-
-            statusEl.innerText = turnOn ? "Lanterna Ligada!" : "Lanterna Desligada.";
-        } catch (err) {
-            statusEl.innerText = "Erro ao acessar lanterna: " + err.message;
-        }
-    }
-
-    document.getElementById('btn-torch-on').addEventListener('click', () => toggleTorch(true));
-    document.getElementById('btn-torch-off').addEventListener('click', () => toggleTorch(false));
-    </script>
-    """
-    st.components.v1.html(torch_js_code, height=120)
-
+    st.write("### Captura via Câmera")
     camera_img = st.camera_input("Tire uma foto clara da carta")
     if camera_img is not None:
         img_file = camera_img
 
 with tab2:
     st.write("### Upload de Imagem")
-    uploaded_file = st.file_uploader("Escolha a foto da carta no celular", type=["jpg", "jpeg", "png"])
+    uploaded_file = st.file_uploader("Escolha a foto da carta no dispositivo", type=["jpg", "jpeg", "png"])
     if uploaded_file is not None:
         img_file = uploaded_file
 
 # ---------------------------------------------------------
-# Processamento de Imagem & Exibição de Resultados
+# Processamento de Imagem
 # ---------------------------------------------------------
 if img_file is not None:
     image = Image.open(img_file)
-    # Correção do Erro: Ajustado para use_container_width=True
+    # Exibe a imagem capturada usando a propriedade atualizada do Streamlit
     st.image(image, caption="Imagem Selecionada", use_container_width=True)
 
     with st.spinner("Analisando texto e número da carta com EasyOCR..."):
+        # Converter Imagem PIL em Array NumPy para OpenCV
         img_np = np.array(image)
         if len(img_np.shape) == 2:
             img_np = cv2.cvtColor(img_np, cv2.COLOR_GRAY2RGB)
         elif img_np.shape[2] == 4:
             img_np = cv2.cvtColor(img_np, cv2.COLOR_RGBA2RGB)
 
+        # Processar OCR
         results = reader.readtext(img_np)
         full_text = " ".join([res[1] for res in results])
         
-        st.write("**Texto Lido:**", f"`{full_text}`" if full_text else "Nenhum texto identificado.")
+        st.write("**Texto Lido da Carta:**", f"`{full_text}`" if full_text else "Nenhum texto legível encontrado.")
 
+        # Regex para localizar o padrão do número da carta (ex: 083/142, 151/197, 4/102)
         match = re.search(r'(\d{1,3})\s*[\/\\]\s*(\d{1,3})', full_text)
         
         card_num = None
@@ -155,13 +112,17 @@ if img_file is not None:
             total_set = match.group(2)
             st.success(f"Número da Carta Identificado: **{card_num}/{total_set}**")
         else:
+            # Tenta encontrar qualquer grupo numérico de 1 a 3 dígitos
             digit_matches = re.findall(r'\b\d{1,3}\b', full_text)
             if digit_matches:
                 card_num = digit_matches[0]
                 st.warning(f"Número identificado (simplificado): **{card_num}**")
 
+    # ---------------------------------------------------------
+    # Busca de Cotação de Preço
+    # ---------------------------------------------------------
     if card_num:
-        with st.spinner("Consultando cotação na API TCGdex..."):
+        with st.spinner("Consultando cotação de mercado na API TCGdex..."):
             card_data = fetch_card_price(card_number=card_num)
 
             if card_data:
@@ -180,7 +141,7 @@ if img_file is not None:
                 with col2:
                     st.write(f"**Coleção:** {card_data.get('set', {}).get('name', 'N/A')}")
                     st.write(f"**Raridade:** {card_data.get('rarity', 'N/A')}")
-                    st.write(f"**Número:** {card_data.get('localId', 'N/A')}")
+                    st.write(f"**Número na Coleção:** {card_data.get('localId', 'N/A')}")
 
                     tcg_prices = card_data.get("pricing", {}).get("tcgplayer", {})
                     cardmarket_prices = card_data.get("pricing", {}).get("cardmarket", {})
@@ -200,8 +161,8 @@ if img_file is not None:
                         st.write(f"• Média: **€{cardmarket_prices.get('avg', 'N/A')}**")
                         st.write(f"• Mínimo: **€{cardmarket_prices.get('low', 'N/A')}**")
                     else:
-                        st.info("Cotação não disponível para este card.")
+                        st.info("Cotação em tempo real não disponível para esta carta.")
             else:
-                st.error("Carta não localizada na base de dados com o número extraído.")
+                st.error("Não foi possível encontrar a carta na base TCGdex com o número lido.")
     else:
-        st.info("💡 **Dica:** Aproxime a foto do canto inferior da carta (ex: 083/142 no Mienfoo da foto).")
+        st.info("💡 **Dica:** Aproxime a câmera do número localizado no canto inferior da carta (ex: 083/142).")
