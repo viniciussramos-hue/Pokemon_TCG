@@ -86,7 +86,6 @@ with tab2:
 # ---------------------------------------------------------
 if img_file is not None:
     image = Image.open(img_file)
-    # Exibe a imagem capturada usando a propriedade atualizada do Streamlit
     st.image(image, caption="Imagem Selecionada", use_container_width=True)
 
     with st.spinner("Analisando texto e número da carta com EasyOCR..."):
@@ -103,8 +102,8 @@ if img_file is not None:
         
         st.write("**Texto Lido da Carta:**", f"`{full_text}`" if full_text else "Nenhum texto legível encontrado.")
 
-        # Regex para localizar o padrão do número da carta (ex: 083/142, 151/197, 4/102)
-        match = re.search(r'(\d{1,3})\s*[\/\\]\s*(\d{1,3})', full_text)
+        # Regex corrigido para localizar o padrão do número (ex: 083/142, 151/197, 4/102)
+        match = re.search(r'(\d{1,3})\s*[/VR\\]\s*(\d{1,3})', full_text, re.IGNORECASE)
         
         card_num = None
         if match:
